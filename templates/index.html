@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Utopia Industries - Yarn Dyeing Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-slate-100 text-slate-800">
+    <main class="max-w-6xl mx-auto p-4 md:p-8 space-y-6">
+      <header class="bg-white shadow rounded-2xl p-5">
+        <h1 class="text-2xl md:text-3xl font-bold">Yarn Dyeing Management System</h1>
+        <p class="text-sm text-slate-600">Utopia Industries | Document Code: <strong>UIND2/DYG/YRN/04/10</strong></p>
+      </header>
+
+      <section class="bg-white shadow rounded-2xl p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-semibold">Recipe Serial Code</label>
+          <select id="recipeCode" class="mt-1 w-full border rounded-lg px-3 py-2"></select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold">Shade</label>
+          <input id="shade" class="mt-1 w-full border rounded-lg px-3 py-2 bg-slate-50" readonly />
+        </div>
+        <div>
+          <label class="block text-sm font-semibold">Machine#</label>
+          <input id="machineNo" class="mt-1 w-full border rounded-lg px-3 py-2" />
+        </div>
+        <div>
+          <label class="block text-sm font-semibold">No. of Cones</label>
+          <input id="cones" type="number" min="0" class="mt-1 w-full border rounded-lg px-3 py-2" />
+        </div>
+        <div>
+          <label class="block text-sm font-semibold">Lot#</label>
+          <input id="lotNo" class="mt-1 w-full border rounded-lg px-3 py-2" />
+        </div>
+        <div>
+          <label class="block text-sm font-semibold">PO#</label>
+          <input id="poNo" class="mt-1 w-full border rounded-lg px-3 py-2" />
+        </div>
+        <div>
+          <label class="block text-sm font-semibold">MPO#</label>
+          <input id="mpoNo" class="mt-1 w-full border rounded-lg px-3 py-2" />
+        </div>
+        <div>
+          <label class="block text-sm font-semibold">Greigh Weight (Kg)</label>
+          <input id="greighWeight" type="number" min="0.001" step="0.001" class="mt-1 w-full border rounded-lg px-3 py-2" />
+        </div>
+        <div class="md:col-span-2 flex flex-wrap gap-2">
+          <button id="calculateBtn" class="bg-indigo-600 text-white px-4 py-2 rounded-lg">Calculate</button>
+          <button id="printBtn" class="bg-emerald-600 text-white px-4 py-2 rounded-lg">Print Recipe Slip</button>
+          <button id="exportTransferBtn" class="bg-slate-800 text-white px-4 py-2 rounded-lg">Export Transfer JSON</button>
+        </div>
+      </section>
+
+      <section class="bg-white shadow rounded-2xl p-5 overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="border-b">
+              <th class="text-left py-2">Chemical</th>
+              <th class="text-left py-2">%</th>
+              <th class="text-left py-2">Kgs</th>
+              <th class="text-left py-2">Grams</th>
+              <th class="text-left py-2">Milligrams</th>
+            </tr>
+          </thead>
+          <tbody id="calcBody"></tbody>
+        </table>
+      </section>
+    </main>
+
+    <template id="printTemplate">
+      <div style="font-family: Arial, sans-serif; padding: 24px; color: #111;">
+        <h2 style="margin: 0 0 8px;">Utopia Industries - Yarn Dyeing Recipe Slip</h2>
+        <p style="margin: 0 0 8px;"><strong>Document Code:</strong> UIND2/DYG/YRN/04/10</p>
+        <p id="printMeta" style="margin: 0 0 16px;"></p>
+        <table border="1" cellspacing="0" cellpadding="6" width="100%">
+          <thead><tr><th>Chemical</th><th>%</th><th>Kgs</th><th>Grams</th><th>Milligrams</th></tr></thead>
+          <tbody id="printBody"></tbody>
+        </table>
+        <div style="display:flex; justify-content:space-between; margin-top:40px; gap: 16px;">
+          <div style="text-align:center; width: 33%; border-top: 1px solid #000; padding-top: 6px;">Prepared By</div>
+          <div style="text-align:center; width: 33%; border-top: 1px solid #000; padding-top: 6px;">Checked By</div>
+          <div style="text-align:center; width: 33%; border-top: 1px solid #000; padding-top: 6px;">Approved By</div>
+        </div>
+      </div>
+    </template>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

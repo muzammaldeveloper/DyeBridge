@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "UIMD Transfer Autofill",
+  "version": "1.0.0",
+  "description": "Auto-fill UIMD material transfer notes for Dyes/Chemicals routing.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": ["https://portal.utopiaindustries.pk/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "UIMD Autofill"
+  }
+}
