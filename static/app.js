@@ -16,14 +16,14 @@ const els = {
 async function loadRecipes() {
   const response = await fetch("/api/recipes");
   if (!response.ok) {
-    els.recipeCode.innerHTML = `<option>No recipes found</option>`;
+    els.recipeCode.replaceChildren(new Option("No recipes found", ""));
     return;
   }
 
   recipes = await response.json();
-  els.recipeCode.innerHTML = recipes
-    .map((r) => `<option value="${r.serial_code}">${r.serial_code}</option>`)
-    .join("");
+  els.recipeCode.replaceChildren(
+    ...recipes.map((r) => new Option(r.serial_code, r.serial_code))
+  );
 
   if (recipes.length) {
     onRecipeChange();
@@ -61,17 +61,19 @@ async function calculate() {
 
   const data = await response.json();
   currentCalculation = data.items;
-  els.calcBody.innerHTML = data.items
-    .map(
-      (item) => `<tr class="border-b">
-        <td class="py-2">${item.chemical}</td>
-        <td class="py-2">${item.percentage}</td>
-        <td class="py-2">${item.kg}</td>
-        <td class="py-2">${item.g}</td>
-        <td class="py-2">${item.mg}</td>
-      </tr>`
-    )
-    .join("");
+  els.calcBody.replaceChildren(
+    ...data.items.map((item) => {
+      const tr = document.createElement("tr");
+      tr.className = "border-b";
+      [item.chemical, item.percentage, item.kg, item.g, item.mg].forEach((value) => {
+        const td = document.createElement("td");
+        td.className = "py-2";
+        td.textContent = String(value);
+        tr.appendChild(td);
+      });
+      return tr;
+    })
+  );
 }
 
 function printSlip() {
@@ -83,16 +85,23 @@ function printSlip() {
   const tpl = document.getElementById("printTemplate");
   const wrapper = document.createElement("div");
   wrapper.innerHTML = tpl.innerHTML;
-  wrapper.querySelector("#printMeta").innerHTML =
-    `<strong>Recipe:</strong> ${els.recipeCode.value} | <strong>Shade:</strong> ${els.shade.value} | ` +
-    `<strong>Machine#:</strong> ${els.machineNo.value} | <strong>Cones:</strong> ${els.cones.value} | ` +
-    `<strong>Lot#:</strong> ${els.lotNo.value} | <strong>PO#:</strong> ${els.poNo.value} | <strong>MPO#:</strong> ${els.mpoNo.value}`;
+  wrapper.querySelector("#printMeta").textContent =
+    `Recipe: ${els.recipeCode.value} | Shade: ${els.shade.value} | ` +
+    `Machine#: ${els.machineNo.value} | Cones: ${els.cones.value} | ` +
+    `Lot#: ${els.lotNo.value} | PO#: ${els.poNo.value} | MPO#: ${els.mpoNo.value}`;
 
-  wrapper.querySelector("#printBody").innerHTML = currentCalculation
-    .map(
-      (item) => `<tr><td>${item.chemical}</td><td>${item.percentage}</td><td>${item.kg}</td><td>${item.g}</td><td>${item.mg}</td></tr>`
-    )
-    .join("");
+  const printBody = wrapper.querySelector("#printBody");
+  printBody.replaceChildren(
+    ...currentCalculation.map((item) => {
+      const tr = document.createElement("tr");
+      [item.chemical, item.percentage, item.kg, item.g, item.mg].forEach((value) => {
+        const td = document.createElement("td");
+        td.textContent = String(value);
+        tr.appendChild(td);
+      });
+      return tr;
+    })
+  );
 
   const printWindow = window.open("", "_blank");
   printWindow.document.write(wrapper.innerHTML);

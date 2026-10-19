@@ -100,7 +100,7 @@ def create_app() -> Flask:
 
     @app.get("/api/recipes")
     def list_recipes():
-        excel_path = request.args.get("excel_path") or app.config["RECIPES_EXCEL_PATH"]
+        excel_path = app.config["RECIPES_EXCEL_PATH"]
         if not os.path.exists(excel_path):
             return jsonify({"error": f"Excel file not found: {excel_path}"}), 404
 

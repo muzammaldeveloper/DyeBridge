@@ -15,7 +15,8 @@ document.getElementById("fillBtn").addEventListener("click", async () => {
   }
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id || !tab.url?.startsWith("https://portal.utopiaindustries.pk")) {
+  const tabUrl = tab?.url ? new URL(tab.url) : null;
+  if (!tab?.id || !tabUrl || tabUrl.protocol !== "https:" || tabUrl.hostname !== "portal.utopiaindustries.pk") {
     alert("Open portal.utopiaindustries.pk first.");
     return;
   }
