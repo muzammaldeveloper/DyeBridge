@@ -1,7 +1,6 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   FlaskConical, 
-  Printer, 
   CheckCircle2, 
   Clock, 
   FileText, 
@@ -28,8 +27,6 @@ import {
   QrCode,
   Copy,
   FileCheck2,
-  Download,
-  Loader2
 } from 'lucide-react';
 
 // Official DyeBridge Custom Brand Icon SVG Component
@@ -306,49 +303,179 @@ const CONE_WEIGHT_PRESETS = [
   { label: '+50g', sub: '1.050 kg', value: 1.05 }
 ];
 
+const MASTER_RECIPES_STORAGE_KEY = 'dyebridge_master_recipes_v1';
+const ISSUED_LOGS_STORAGE_KEY = 'dyebridge_issued_logs_v1';
+
+const DEFAULT_SAVED_LOGS = [
+  {
+    slipNo: 'UT-YD-2083',
+    date: '2026-10-25',
+    shade: 'BLUE',
+    lotNo: '12633',
+    machineNo: 'Machine #6',
+    yarnCount: '16/S',
+    cones: 1140,
+    perConeKg: 1.000,
+    totalWeightKg: 1140.0,
+    waterLiters: 7980.0,
+    status: 'STORE_ISSUED',
+    shift: 'Shift A'
+  },
+  {
+    slipNo: 'UT-YD-2082',
+    date: '2026-10-25',
+    shade: 'GREEN',
+    lotNo: '12427',
+    machineNo: 'Machine #5',
+    yarnCount: '10/S',
+    cones: 630,
+    perConeKg: 1.000,
+    totalWeightKg: 630.0,
+    waterLiters: 4410.0,
+    status: 'SUPERVISOR_SIGNED',
+    shift: 'Shift B'
+  },
+  {
+    slipNo: 'UT-YD-2081',
+    date: '2026-10-24',
+    shade: 'ORANGE',
+    lotNo: '12209',
+    machineNo: 'Machine #6',
+    yarnCount: '16/1',
+    cones: 1165,
+    perConeKg: 1.000,
+    totalWeightKg: 1165.0,
+    waterLiters: 8155.0,
+    status: 'STORE_ISSUED',
+    shift: 'Shift A'
+  }
+];
+
+const sanitizeNumber = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const cloneRecipeItems = (items = [], prefix = 'item') =>
+  Array.isArray(items)
+    ? items.map((item, index) => ({
+        id: String(item?.id || `${prefix}-${index + 1}`),
+        name: String(item?.name || '').trim().toUpperCase(),
+        percent: Math.max(0, sanitizeNumber(item?.percent, 0))
+      }))
+    : [];
+
+const cloneRecipe = (recipe, fallbackKey = 'CUSTOM') => ({
+  id: String(recipe?.id || fallbackKey).trim().toUpperCase(),
+  name: String(recipe?.name || fallbackKey).trim().toUpperCase(),
+  fullName: String(recipe?.fullName || `Cabana ${fallbackKey}`).trim(),
+  yarnType: String(recipe?.yarnType || '100% Cotton').trim(),
+  colorHex: String(recipe?.colorHex || '#64748b').trim(),
+  badgeBg: String(recipe?.badgeBg || 'bg-zinc-100 text-zinc-700 border-zinc-200').trim(),
+  dotColor: String(recipe?.dotColor || '#64748b').trim(),
+  defaultCones: Math.max(1, Math.round(sanitizeNumber(recipe?.defaultCones, 1))),
+  defaultCount: String(recipe?.defaultCount || '16/S').trim(),
+  defaultMachine: String(recipe?.defaultMachine || 'Machine #1').trim(),
+  defaultLot: String(recipe?.defaultLot || '00000').trim(),
+  liquorRatio: Math.max(1, sanitizeNumber(recipe?.liquorRatio, 7)),
+  pretreatment: cloneRecipeItems(recipe?.pretreatment, 'pt'),
+  dyes: cloneRecipeItems(recipe?.dyes, 'dy'),
+  auxiliaries: cloneRecipeItems(recipe?.auxiliaries, 'ax')
+});
+
+const loadMasterRecipes = () => {
+  const baseRecipes = Object.fromEntries(
+    Object.entries(CABANA_MASTER_RECIPES).map(([key, recipe]) => [key, cloneRecipe(recipe, key)])
+  );
+  if (typeof window === 'undefined') return baseRecipes;
+  try {
+    const raw = window.localStorage.getItem(MASTER_RECIPES_STORAGE_KEY);
+    if (!raw) return baseRecipes;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return baseRecipes;
+    const sanitized = Object.entries(parsed).reduce((acc, [key, value]) => {
+      const normalizedKey = String(key || '').trim().toUpperCase();
+      if (!normalizedKey) return acc;
+      acc[normalizedKey] = cloneRecipe(value, normalizedKey);
+      return acc;
+    }, {});
+    return Object.keys(sanitized).length > 0 ? sanitized : baseRecipes;
+  } catch (error) {
+    console.error('Failed to parse saved master recipes:', error);
+    return baseRecipes;
+  }
+};
+
+const loadIssuedLogs = () => {
+  if (typeof window === 'undefined') return DEFAULT_SAVED_LOGS;
+  try {
+    const raw = window.localStorage.getItem(ISSUED_LOGS_STORAGE_KEY);
+    if (!raw) return DEFAULT_SAVED_LOGS;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return DEFAULT_SAVED_LOGS;
+    const sanitized = parsed
+      .map((log) => ({
+        slipNo: String(log?.slipNo || '').trim(),
+        date: String(log?.date || '').trim(),
+        shade: String(log?.shade || '').trim().toUpperCase(),
+        lotNo: String(log?.lotNo || '').trim(),
+        machineNo: String(log?.machineNo || '').trim(),
+        yarnCount: String(log?.yarnCount || '').trim(),
+        cones: Math.max(0, Math.round(sanitizeNumber(log?.cones, 0))),
+        perConeKg: Math.max(0, sanitizeNumber(log?.perConeKg, 0)),
+        totalWeightKg: Math.max(0, sanitizeNumber(log?.totalWeightKg, 0)),
+        waterLiters: Math.max(0, sanitizeNumber(log?.waterLiters, 0)),
+        status: ['GENERATED', 'SUPERVISOR_SIGNED', 'STORE_ISSUED'].includes(log?.status)
+          ? log.status
+          : 'GENERATED',
+        shift: String(log?.shift || '').trim()
+      }))
+      .filter((log) => log.slipNo && log.date && log.shade);
+    return sanitized.length > 0 ? sanitized : DEFAULT_SAVED_LOGS;
+  } catch (error) {
+    console.error('Failed to parse saved issued logs:', error);
+    return DEFAULT_SAVED_LOGS;
+  }
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('workspace'); // 'workspace' | 'recipes' | 'logs'
-  const slipPrintRef = useRef(null);
-
-  // PDF Generation & Toast Feedback State
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [pdfToastMessage, setPdfToastMessage] = useState(null);
 
-  // Preload html2pdf.js CDN script on mount so PDF generation is instant
-  useEffect(() => {
-    if (!document.getElementById('html2pdf-cdn-script')) {
-      const script = document.createElement('script');
-      script.id = 'html2pdf-cdn-script';
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-      script.async = true;
-      document.body.appendChild(script);
-    }
-  }, []);
+  const [masterRecipes, setMasterRecipes] = useState(() => loadMasterRecipes());
+  const [recipeErrorMessage, setRecipeErrorMessage] = useState('');
 
   // Selected Shade Key
-  const [selectedShade, setSelectedShade] = useState('BLUE');
+  const [selectedShade, setSelectedShade] = useState(() =>
+    masterRecipes.BLUE ? 'BLUE' : Object.keys(masterRecipes)[0] || 'BLUE'
+  );
 
   // Cone & Weight Logic State
-  const [conesCount, setConesCount] = useState(1140);
+  const [conesCount, setConesCount] = useState(() => masterRecipes[selectedShade]?.defaultCones || 1140);
   const [perConeKg, setPerConeKg] = useState(1.000);
   const [isManualWeightOverride, setIsManualWeightOverride] = useState(false);
-  const [manualWeightKg, setManualWeightKg] = useState(1140);
+  const [manualWeightKg, setManualWeightKg] = useState(() => masterRecipes[selectedShade]?.defaultCones || 1140);
 
   // Batch Metadata State
-  const [lotNo, setLotNo] = useState('12633');
-  const [machineNo, setMachineNo] = useState('Machine #6');
-  const [yarnCount, setYarnCount] = useState('16/S');
+  const [lotNo, setLotNo] = useState(() => masterRecipes[selectedShade]?.defaultLot || '12633');
+  const [machineNo, setMachineNo] = useState(() => masterRecipes[selectedShade]?.defaultMachine || 'Machine #6');
+  const [yarnCount, setYarnCount] = useState(() => masterRecipes[selectedShade]?.defaultCount || '16/S');
   const [customerName, setCustomerName] = useState('Cabana');
   const [poNumber, setPoNumber] = useState('PO-CAB-2026');
   const [shift, setShift] = useState('Shift A');
   const [slipDate, setSlipDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [slipIdCounter, setSlipIdCounter] = useState(2084);
   const [currentSlipStatus, setCurrentSlipStatus] = useState('GENERATED'); // 'GENERATED' | 'SUPERVISOR_SIGNED' | 'STORE_ISSUED'
+  const [editingSlipNo, setEditingSlipNo] = useState(null);
 
   // Editable Recipe Items State (allows inline percentage adjustments or custom additions per batch)
-  const [pretreatmentItems, setPretreatmentItems] = useState(CABANA_MASTER_RECIPES['BLUE'].pretreatment);
-  const [dyeItems, setDyeItems] = useState(CABANA_MASTER_RECIPES['BLUE'].dyes);
-  const [auxiliaryItems, setAuxiliaryItems] = useState(CABANA_MASTER_RECIPES['BLUE'].auxiliaries);
+  const [pretreatmentItems, setPretreatmentItems] = useState(() =>
+    cloneRecipeItems(masterRecipes[selectedShade]?.pretreatment, 'pt')
+  );
+  const [dyeItems, setDyeItems] = useState(() => cloneRecipeItems(masterRecipes[selectedShade]?.dyes, 'dy'));
+  const [auxiliaryItems, setAuxiliaryItems] = useState(() =>
+    cloneRecipeItems(masterRecipes[selectedShade]?.auxiliaries, 'ax')
+  );
   const [secondAdditionItems, setSecondAdditionItems] = useState([]);
   const [isEditingPercentages, setIsEditingPercentages] = useState(false);
 
@@ -364,62 +491,56 @@ export default function App() {
   const [secondAddPercent, setSecondAddPercent] = useState('');
 
   // Saved Requisition Logs State
-  const [savedLogs, setSavedLogs] = useState([
-    {
-      slipNo: 'UT-YD-2083',
-      date: '2026-10-25',
-      shade: 'BLUE',
-      lotNo: '12633',
-      machineNo: 'Machine #6',
-      yarnCount: '16/S',
-      cones: 1140,
-      perConeKg: 1.000,
-      totalWeightKg: 1140.0,
-      waterLiters: 7980.0,
-      status: 'STORE_ISSUED',
-      shift: 'Shift A'
-    },
-    {
-      slipNo: 'UT-YD-2082',
-      date: '2026-10-25',
-      shade: 'GREEN',
-      lotNo: '12427',
-      machineNo: 'Machine #5',
-      yarnCount: '10/S',
-      cones: 630,
-      perConeKg: 1.000,
-      totalWeightKg: 630.0,
-      waterLiters: 4410.0,
-      status: 'SUPERVISOR_SIGNED',
-      shift: 'Shift B'
-    },
-    {
-      slipNo: 'UT-YD-2081',
-      date: '2026-10-24',
-      shade: 'ORANGE',
-      lotNo: '12209',
-      machineNo: 'Machine #6',
-      yarnCount: '16/1',
-      cones: 1165,
-      perConeKg: 1.000,
-      totalWeightKg: 1165.0,
-      waterLiters: 8155.0,
-      status: 'STORE_ISSUED',
-      shift: 'Shift A'
+  const [savedLogs, setSavedLogs] = useState(() => loadIssuedLogs());
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(MASTER_RECIPES_STORAGE_KEY, JSON.stringify(masterRecipes));
+    } catch (error) {
+      console.error('Failed to persist master recipes:', error);
     }
-  ]);
+  }, [masterRecipes]);
 
-  // Switch Shade Handler (Loads authentic defaults from Excel sheet)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(ISSUED_LOGS_STORAGE_KEY, JSON.stringify(savedLogs));
+    } catch (error) {
+      console.error('Failed to persist issued logs:', error);
+    }
+  }, [savedLogs]);
+
+  useEffect(() => {
+    if (masterRecipes[selectedShade]) return;
+    const firstKey = Object.keys(masterRecipes)[0];
+    if (firstKey) {
+      handleSelectShade(firstKey, true);
+    }
+  }, [masterRecipes, selectedShade]);
+
+  useEffect(() => {
+    const latestSlipNo = savedLogs
+      .map((log) => parseInt(String(log.slipNo || '').replace('UT-YD-', ''), 10))
+      .filter((num) => Number.isFinite(num))
+      .sort((a, b) => b - a)[0];
+    if (latestSlipNo) {
+      setSlipIdCounter((prev) => Math.max(prev, latestSlipNo + 1));
+    }
+  }, [savedLogs]);
+
+  // Switch Shade Handler (loads dynamic master recipe defaults)
   const handleSelectShade = (shadeKey, loadDefaults = true) => {
-    setSelectedShade(shadeKey);
-    const master = CABANA_MASTER_RECIPES[shadeKey];
+    const normalizedShadeKey = String(shadeKey || '').trim().toUpperCase();
+    const master = masterRecipes[normalizedShadeKey];
     if (!master) return;
-
-    setPretreatmentItems(master.pretreatment.map(i => ({ ...i })));
-    setDyeItems(master.dyes.map(i => ({ ...i })));
-    setAuxiliaryItems(master.auxiliaries.map(i => ({ ...i })));
+    setSelectedShade(normalizedShadeKey);
+    setPretreatmentItems(cloneRecipeItems(master.pretreatment, 'pt'));
+    setDyeItems(cloneRecipeItems(master.dyes, 'dy'));
+    setAuxiliaryItems(cloneRecipeItems(master.auxiliaries, 'ax'));
     setSecondAdditionItems([]);
     setIsSecondAdditionEnabled(false);
+    setRecipeErrorMessage('');
 
     if (loadDefaults) {
       setConesCount(master.defaultCones);
@@ -428,6 +549,101 @@ export default function App() {
       setMachineNo(master.defaultMachine);
       setLotNo(master.defaultLot);
     }
+  };
+
+  const saveCurrentRecipeToMasterBook = () => {
+    const activeMaster = masterRecipes[selectedShade] || Object.values(masterRecipes)[0] || cloneRecipe({}, 'DEFAULT');
+    if (!activeMaster) return;
+    const hasInvalidItem =
+      [...pretreatmentItems, ...dyeItems, ...auxiliaryItems].some(
+        (item) => !item.name?.trim() || sanitizeNumber(item.percent, -1) < 0
+      );
+    if (hasInvalidItem) {
+      setRecipeErrorMessage('Recipe item name and % must be valid before saving.');
+      return;
+    }
+    setMasterRecipes((prev) => ({
+      ...prev,
+      [selectedShade]: cloneRecipe(
+        {
+          ...activeMaster,
+          defaultCones: Math.max(1, parseInt(conesCount, 10) || 1),
+          defaultCount: yarnCount,
+          defaultMachine: machineNo,
+          defaultLot: lotNo,
+          pretreatment: pretreatmentItems,
+          dyes: dyeItems,
+          auxiliaries: auxiliaryItems
+        },
+        selectedShade
+      )
+    }));
+    setRecipeErrorMessage('');
+    setPdfToastMessage(`Master recipe ${selectedShade} updated successfully.`);
+    setTimeout(() => setPdfToastMessage(null), 3000);
+  };
+
+  const handleCreateNewRecipe = () => {
+    const recipeCode = window.prompt('Enter new shade code (example: SKY_BLUE):', '')?.trim().toUpperCase();
+    if (!recipeCode) return;
+    if (masterRecipes[recipeCode]) {
+      setRecipeErrorMessage(`Recipe ${recipeCode} already exists.`);
+      return;
+    }
+    const recipeName = window.prompt('Enter full recipe name:', `Cabana ${recipeCode}`)?.trim();
+    if (!recipeName) {
+      setRecipeErrorMessage('Recipe full name is required.');
+      return;
+    }
+    const colorHex = window.prompt('Enter color hex (example: #3b82f6):', '#64748b')?.trim() || '#64748b';
+    const newRecipe = cloneRecipe(
+      {
+        id: recipeCode,
+        name: recipeCode,
+        fullName: recipeName,
+        yarnType: '100% Cotton',
+        colorHex,
+        badgeBg: 'bg-zinc-100 text-zinc-700 border-zinc-200',
+        dotColor: colorHex,
+        defaultCones: Math.max(1, parseInt(conesCount, 10) || 1),
+        defaultCount: yarnCount || '16/S',
+        defaultMachine: machineNo || 'Machine #1',
+        defaultLot: lotNo || '00000',
+        liquorRatio: 7,
+        pretreatment: [],
+        dyes: [],
+        auxiliaries: []
+      },
+      recipeCode
+    );
+    setMasterRecipes((prev) => ({ ...prev, [recipeCode]: newRecipe }));
+    handleSelectShade(recipeCode, true);
+    setActiveTab('workspace');
+    setPdfToastMessage(`Recipe ${recipeCode} added. Configure and save from workspace.`);
+    setTimeout(() => setPdfToastMessage(null), 3500);
+  };
+
+  const handleDeleteRecipe = (recipeKey) => {
+    const normalizedRecipeKey = String(recipeKey || '').trim().toUpperCase();
+    if (!masterRecipes[normalizedRecipeKey]) return;
+    if (Object.keys(masterRecipes).length <= 1) {
+      setRecipeErrorMessage('At least one master recipe must remain.');
+      return;
+    }
+    if (!window.confirm(`Delete recipe ${normalizedRecipeKey}? This cannot be undone.`)) return;
+
+    const nextRecipes = { ...masterRecipes };
+    delete nextRecipes[normalizedRecipeKey];
+    const nextKeys = Object.keys(nextRecipes);
+    setMasterRecipes(nextRecipes);
+    if (selectedShade === normalizedRecipeKey && nextKeys.length > 0) {
+      handleSelectShade(nextKeys[0], true);
+    }
+
+    setSavedLogs((prev) => prev.filter((log) => log.shade !== normalizedRecipeKey));
+    setRecipeErrorMessage('');
+    setPdfToastMessage(`Recipe ${normalizedRecipeKey} deleted.`);
+    setTimeout(() => setPdfToastMessage(null), 3000);
   };
 
   // Computed Total Yarn Weight in Kgs
@@ -523,7 +739,7 @@ export default function App() {
         : setAuxiliaryItems;
 
     setter(prev =>
-      prev.map(item => (item.id === id ? { ...item, percent: isNaN(val) ? 0 : val } : item))
+      prev.map(item => (item.id === id ? { ...item, percent: Number.isNaN(val) ? 0 : Math.max(0, val) } : item))
     );
   };
 
@@ -531,11 +747,17 @@ export default function App() {
   const handleAddSecondAddition = (e) => {
     e.preventDefault();
     if (!secondAddName.trim() || !secondAddPercent) return;
+    const parsedPercent = parseFloat(secondAddPercent);
+    if (Number.isNaN(parsedPercent) || parsedPercent < 0) {
+      setPdfToastMessage('Second addition % must be a valid positive number.');
+      setTimeout(() => setPdfToastMessage(null), 3000);
+      return;
+    }
     const newEntry = {
       id: `sec-${Date.now()}`,
       category: secondAddType,
       name: secondAddName.trim().toUpperCase(),
-      percent: parseFloat(secondAddPercent) || 0
+      percent: parsedPercent
     };
     setSecondAdditionItems(prev => [...prev, newEntry]);
     setSecondAddName('');
@@ -546,10 +768,16 @@ export default function App() {
   const handleAddCustomChemical = (e) => {
     e.preventDefault();
     if (!newItemName.trim() || !newItemPercent) return;
+    const parsedPercent = parseFloat(newItemPercent);
+    if (Number.isNaN(parsedPercent) || parsedPercent < 0) {
+      setPdfToastMessage('Chemical % must be a valid positive number.');
+      setTimeout(() => setPdfToastMessage(null), 3000);
+      return;
+    }
     const newEntry = {
       id: `custom-${Date.now()}`,
       name: newItemName.trim().toUpperCase(),
-      percent: parseFloat(newItemPercent) || 0
+      percent: parsedPercent
     };
 
     if (newItemSection === 'pretreatment') {
@@ -578,164 +806,77 @@ export default function App() {
 
   // Reset recipe to factory Cabana standard
   const handleResetRecipe = () => {
-    const master = CABANA_MASTER_RECIPES[selectedShade];
+    const master = masterRecipes[selectedShade];
     if (!master) return;
-    setPretreatmentItems(master.pretreatment.map(i => ({ ...i })));
-    setDyeItems(master.dyes.map(i => ({ ...i })));
-    setAuxiliaryItems(master.auxiliaries.map(i => ({ ...i })));
+    setPretreatmentItems(cloneRecipeItems(master.pretreatment, 'pt'));
+    setDyeItems(cloneRecipeItems(master.dyes, 'dy'));
+    setAuxiliaryItems(cloneRecipeItems(master.auxiliaries, 'ax'));
     setSecondAdditionItems([]);
     setIsSecondAdditionEnabled(false);
+    setRecipeErrorMessage('');
   };
 
   // Save current slip to Requisition Logs
   const handleSaveSlipToLogs = () => {
-    const newSlipNo = `UT-YD-${slipIdCounter}`;
+    if (!selectedShade || !masterRecipes[selectedShade]) {
+      setPdfToastMessage('Select a valid recipe before saving.');
+      setTimeout(() => setPdfToastMessage(null), 3000);
+      return;
+    }
+    if (!slipDate || !lotNo.trim() || !machineNo.trim() || !yarnCount.trim()) {
+      setPdfToastMessage('Date, lot, machine and yarn count are required.');
+      setTimeout(() => setPdfToastMessage(null), 3000);
+      return;
+    }
+    const normalizedCones = Math.max(0, parseInt(conesCount, 10) || 0);
+    if (normalizedCones <= 0) {
+      setPdfToastMessage('Cones must be greater than zero.');
+      setTimeout(() => setPdfToastMessage(null), 3000);
+      return;
+    }
     const newLog = {
-      slipNo: newSlipNo,
+      slipNo: editingSlipNo || `UT-YD-${slipIdCounter}`,
       date: slipDate,
       shade: selectedShade,
       lotNo,
       machineNo,
       yarnCount,
-      cones: conesCount,
-      perConeKg,
+      cones: normalizedCones,
+      perConeKg: Number(perConeKg),
       totalWeightKg: totalYarnWeightKg,
       waterLiters: totalWaterLiters,
       status: currentSlipStatus,
       shift
     };
-    setSavedLogs([newLog, ...savedLogs]);
-    setSlipIdCounter(prev => prev + 1);
-    setPdfToastMessage(`Slip ${newSlipNo} saved to Requisition Logs!`);
+    setSavedLogs((prev) => {
+      if (editingSlipNo) {
+        return prev.map((log) => (log.slipNo === editingSlipNo ? newLog : log));
+      }
+      return [newLog, ...prev];
+    });
+    if (!editingSlipNo) {
+      setSlipIdCounter((prev) => prev + 1);
+    }
+    setPdfToastMessage(
+      editingSlipNo
+        ? `Slip ${editingSlipNo} updated in Requisition Logs.`
+        : `Slip ${newLog.slipNo} saved to Requisition Logs!`
+    );
+    setEditingSlipNo(null);
     setTimeout(() => setPdfToastMessage(null), 3500);
   };
 
-  // Ensure html2pdf library is loaded
-  const ensureHtml2PdfLoaded = () => {
-    return new Promise((resolve, reject) => {
-      if (window.html2pdf) {
-        resolve(window.html2pdf);
-        return;
-      }
-      const existingScript = document.getElementById('html2pdf-cdn-script');
-      if (existingScript) {
-        existingScript.addEventListener('load', () => resolve(window.html2pdf));
-        existingScript.addEventListener('error', reject);
-      } else {
-        const script = document.createElement('script');
-        script.id = 'html2pdf-cdn-script';
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-        script.onload = () => resolve(window.html2pdf);
-        script.onerror = reject;
-        document.body.appendChild(script);
-      }
-    });
+  const handleDeleteIssuedSlip = (slipNo) => {
+    if (!window.confirm(`Delete issued slip ${slipNo}? This action cannot be undone.`)) return;
+    setSavedLogs((prev) => prev.filter((log) => log.slipNo !== slipNo));
+    if (editingSlipNo === slipNo) {
+      setEditingSlipNo(null);
+    }
+    setPdfToastMessage(`Slip ${slipNo} deleted.`);
+    setTimeout(() => setPdfToastMessage(null), 3000);
   };
 
-  // Generate & Download Official A4 PDF (with optional immediate Print trigger)
-  const handleGeneratePdfAndPrint = async (mode = 'BOTH') => {
-    const cleanLot = String(lotNo || 'BATCH').replace(/[^a-zA-Z0-9_-]/g, '');
-    const pdfFileName = `DyeBridge_Slip_LOT-${cleanLot}_${selectedShade}.pdf`;
-
-    if (mode === 'PRINT_ONLY') {
-      window.print();
-      return;
-    }
-
-    try {
-      setIsGeneratingPdf(true);
-      setPdfToastMessage(`Generating PDF: ${pdfFileName}...`);
-
-      const html2pdfLib = await ensureHtml2PdfLoaded();
-      const element = slipPrintRef.current;
-
-      if (element && html2pdfLib) {
-        // Create an isolated, left-aligned (x=0, y=0) A4 container so html2canvas NEVER crops the left side
-        const a4WidthPx = 794; // Exact A4 portrait width at 96 DPI
-        const wrapper = document.createElement('div');
-        wrapper.style.position = 'fixed';
-        wrapper.style.top = '0';
-        wrapper.style.left = '0';
-        wrapper.style.width = `${a4WidthPx}px`;
-        wrapper.style.backgroundColor = '#ffffff';
-        wrapper.style.padding = '16px 22px';
-        wrapper.style.boxSizing = 'border-box';
-        wrapper.style.zIndex = '-9999';
-
-        const clone = element.cloneNode(true);
-        clone.style.margin = '0';
-        clone.style.width = '100%';
-        clone.style.maxWidth = '100%';
-        clone.style.boxShadow = 'none';
-        clone.style.border = '1.5px solid #09090b';
-        clone.style.borderRadius = '8px';
-        clone.style.padding = '16px 18px';
-        clone.style.backgroundColor = '#ffffff';
-
-        wrapper.appendChild(clone);
-        document.body.appendChild(wrapper);
-
-        const opt = {
-          margin: [4, 4, 4, 4],
-          filename: pdfFileName,
-          image: { type: 'jpeg', quality: 1.0 },
-          html2canvas: {
-            scale: 2.5,
-            useCORS: true,
-            backgroundColor: '#ffffff',
-            logging: false,
-            scrollX: 0,
-            scrollY: 0,
-            x: 0,
-            y: 0,
-            width: a4WidthPx,
-            windowWidth: a4WidthPx
-          },
-          pagebreak: { mode: ['avoid-all'] },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true }
-        };
-
-        try {
-          const worker = html2pdfLib().set(opt).from(wrapper).toPdf();
-          const pdfObj = await worker.get('pdf');
-          const totalPages = pdfObj.internal.getNumberOfPages();
-          if (totalPages > 1) {
-            for (let i = totalPages; i > 1; i--) {
-              pdfObj.deletePage(i);
-            }
-          }
-          await worker.save();
-        } finally {
-          if (document.body.contains(wrapper)) {
-            document.body.removeChild(wrapper);
-          }
-        }
-      }
-
-      setIsGeneratingPdf(false);
-
-      if (mode === 'BOTH') {
-        setPdfToastMessage(`PDF Downloaded (${pdfFileName}) & Opening Print Dialog...`);
-        setTimeout(() => {
-          window.print();
-        }, 350);
-      } else {
-        setPdfToastMessage(`PDF Downloaded Successfully: ${pdfFileName}`);
-      }
-
-      setTimeout(() => setPdfToastMessage(null), 5000);
-    } catch (err) {
-      console.error('PDF generation error:', err);
-      setIsGeneratingPdf(false);
-      setPdfToastMessage('Opening Print / Save as PDF Dialog...');
-      if (mode === 'BOTH') {
-        window.print();
-      }
-      setTimeout(() => setPdfToastMessage(null), 4000);
-    }
-  };
-
-  const activeMaster = CABANA_MASTER_RECIPES[selectedShade];
+  const activeMaster = masterRecipes[selectedShade];
 
   return (
     <div className="min-h-screen bg-[#FAFAFA] text-zinc-900 font-sans selection:bg-zinc-900 selection:text-white">
@@ -786,14 +927,10 @@ export default function App() {
         }
       `}</style>
 
-      {/* Floating Status Toast Banner for PDF & Print Feedback */}
+      {/* Floating Status Toast Banner */}
       {pdfToastMessage && (
         <div className="fixed bottom-5 right-5 z-50 no-print flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-zinc-950 text-white text-xs font-semibold shadow-xl border border-zinc-800 animate-in fade-in slide-in-from-bottom-4">
-          {isGeneratingPdf ? (
-            <Loader2 className="w-4 h-4 text-blue-400 animate-spin shrink-0" />
-          ) : (
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-          )}
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{pdfToastMessage}</span>
         </div>
       )}
@@ -843,7 +980,7 @@ export default function App() {
               }`}
             >
               <Layers className="w-3.5 h-3.5" />
-              <span>Cabana Master Book (7)</span>
+              <span>Cabana Master Book ({Object.keys(masterRecipes).length})</span>
             </button>
 
             <button
@@ -859,7 +996,7 @@ export default function App() {
             </button>
           </nav>
 
-          {/* Right Quick Actions: Single Clean Primary Action Button */}
+          {/* Right Quick Actions */}
           <div className="flex items-center gap-2.5">
             <button
               type="button"
@@ -867,22 +1004,17 @@ export default function App() {
               className="px-3 py-2 rounded-xl bg-white hover:bg-zinc-50 text-zinc-800 border border-zinc-200/90 text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
             >
               <FileCheck2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span className="hidden sm:inline">Save Log</span>
+              <span className="hidden sm:inline">{editingSlipNo ? 'Update Log' : 'Save Log'}</span>
             </button>
-
-            <button
-              type="button"
-              disabled={isGeneratingPdf}
-              onClick={() => handleGeneratePdfAndPrint('BOTH')}
-              className="px-4 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-800 active:scale-[0.99] text-white text-xs font-semibold flex items-center gap-2 shadow-xs transition-all cursor-pointer disabled:opacity-60"
-            >
-              {isGeneratingPdf ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
-              ) : (
-                <Printer className="w-3.5 h-3.5 text-blue-400" />
-              )}
-              <span>Print & Download 1-Page PDF</span>
-            </button>
+            {editingSlipNo && (
+              <button
+                type="button"
+                onClick={() => setEditingSlipNo(null)}
+                className="px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-semibold cursor-pointer"
+              >
+                Editing {editingSlipNo} (Cancel)
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -915,8 +1047,8 @@ export default function App() {
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {Object.keys(CABANA_MASTER_RECIPES).map((key) => {
-                    const recipe = CABANA_MASTER_RECIPES[key];
+                  {Object.keys(masterRecipes).map((key) => {
+                    const recipe = masterRecipes[key];
                     const active = selectedShade === key;
                     return (
                       <button
@@ -1223,6 +1355,13 @@ export default function App() {
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
+                      onClick={saveCurrentRecipeToMasterBook}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 transition-all cursor-pointer"
+                    >
+                      Save to Master Book
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setIsEditingPercentages(!isEditingPercentages)}
                       className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${
                         isEditingPercentages
@@ -1243,6 +1382,12 @@ export default function App() {
                     </button>
                   </div>
                 </div>
+
+                {recipeErrorMessage && (
+                  <div className="text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg px-2.5 py-2">
+                    {recipeErrorMessage}
+                  </div>
+                )}
 
                 {/* Add Extra Chemical Line */}
                 {isEditingPercentages && (
@@ -1439,7 +1584,6 @@ export default function App() {
             {/* RIGHT PANEL: OFFICIAL 1-PAGE PRINTABLE STORE REQUISITION SLIP (7 Cols) */}
             <div className="lg:col-span-7 print-slip-col">
               <div
-                ref={slipPrintRef}
                 className="bg-white rounded-2xl border border-zinc-300/90 shadow-sm p-5 sm:p-6 print-only-slip"
               >
                 
@@ -1932,7 +2076,7 @@ export default function App() {
                 {/* SLIP FOOTER */}
                 <div className="mt-2.5 pt-1.5 border-t border-zinc-200 flex flex-wrap items-center justify-between text-[9px] font-mono text-zinc-400">
                   <span>UTOPIA INDUSTRIES • DYEBRIDGE OS (CABANA 100% COTTON)</span>
-                  <span>L:R 1:7 STANDARD • SINGLE-PAGE OFFICIAL STORE REQUISITION</span>
+                  <span>L:R 1:7 STANDARD • OFFICIAL STORE REQUISITION</span>
                 </div>
               </div>
             </div>
@@ -1958,14 +2102,28 @@ export default function App() {
               </div>
               <div className="flex items-center gap-2">
                 <span className="px-3 py-1.5 rounded-xl bg-zinc-100 border border-zinc-200 text-xs font-mono font-semibold text-zinc-800">
-                  7 Verified Shades
+                  {Object.keys(masterRecipes).length} Active Shades
                 </span>
+                <button
+                  type="button"
+                  onClick={handleCreateNewRecipe}
+                  className="px-3 py-1.5 rounded-xl bg-zinc-950 text-white border border-zinc-900 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Recipe</span>
+                </button>
               </div>
             </div>
 
+            {recipeErrorMessage && (
+              <div className="text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                {recipeErrorMessage}
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {Object.keys(CABANA_MASTER_RECIPES).map((key) => {
-                const recipe = CABANA_MASTER_RECIPES[key];
+              {Object.keys(masterRecipes).map((key) => {
+                const recipe = masterRecipes[key];
                 return (
                   <div
                     key={key}
@@ -2044,7 +2202,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="p-3.5 bg-zinc-50 border-t border-zinc-100">
+                    <div className="p-3.5 bg-zinc-50 border-t border-zinc-100 space-y-2">
                       <button
                         type="button"
                         onClick={() => {
@@ -2056,6 +2214,26 @@ export default function App() {
                         <span>Load {recipe.name} into Calculator</span>
                         <ArrowUpRight className="w-3.5 h-3.5" />
                       </button>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleSelectShade(key, true);
+                            setActiveTab('workspace');
+                          }}
+                          className="py-1.5 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 text-[11px] font-semibold border border-zinc-200 cursor-pointer"
+                        >
+                          Edit in Workspace
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteRecipe(key)}
+                          className="py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 text-[11px] font-semibold border border-red-200 flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Delete</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -2080,7 +2258,10 @@ export default function App() {
               </div>
               <button
                 type="button"
-                onClick={() => setActiveTab('workspace')}
+                onClick={() => {
+                  setEditingSlipNo(null);
+                  setActiveTab('workspace');
+                }}
                 className="px-3.5 py-2 rounded-xl bg-zinc-950 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -2105,7 +2286,7 @@ export default function App() {
                 </thead>
                 <tbody className="divide-y divide-zinc-200/70">
                   {savedLogs.map((log, i) => {
-                    const shadeObj = CABANA_MASTER_RECIPES[log.shade];
+                    const shadeObj = masterRecipes[log.shade];
                     return (
                       <tr key={i} className="hover:bg-zinc-50/80">
                         <td className="py-3 px-4 font-mono font-bold text-zinc-950">{log.slipNo}</td>
@@ -2147,22 +2328,53 @@ export default function App() {
                           </span>
                         </td>
                         <td className="py-3 px-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleSelectShade(log.shade, false);
-                              setConesCount(log.cones);
-                              setPerConeKg(log.perConeKg);
-                              setLotNo(log.lotNo);
-                              setMachineNo(log.machineNo);
-                              setYarnCount(log.yarnCount);
-                              setCurrentSlipStatus(log.status);
-                              setActiveTab('workspace');
-                            }}
-                            className="px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-900 hover:text-white text-zinc-800 font-semibold text-[11px] transition-all cursor-pointer"
-                          >
-                            Load Slip
-                          </button>
+                          <div className="inline-flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleSelectShade(log.shade, false);
+                                setConesCount(log.cones);
+                                setPerConeKg(log.perConeKg);
+                                setLotNo(log.lotNo);
+                                setMachineNo(log.machineNo);
+                                setYarnCount(log.yarnCount);
+                                setCurrentSlipStatus(log.status);
+                                setSlipDate(log.date);
+                                setShift(log.shift);
+                                setEditingSlipNo(null);
+                                setActiveTab('workspace');
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-900 hover:text-white text-zinc-800 font-semibold text-[11px] transition-all cursor-pointer"
+                            >
+                              Load
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleSelectShade(log.shade, false);
+                                setConesCount(log.cones);
+                                setPerConeKg(log.perConeKg);
+                                setLotNo(log.lotNo);
+                                setMachineNo(log.machineNo);
+                                setYarnCount(log.yarnCount);
+                                setCurrentSlipStatus(log.status);
+                                setSlipDate(log.date);
+                                setShift(log.shift);
+                                setEditingSlipNo(log.slipNo);
+                                setActiveTab('workspace');
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-[11px] transition-all cursor-pointer border border-blue-200"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteIssuedSlip(log.slipNo)}
+                              className="px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 font-semibold text-[11px] transition-all cursor-pointer border border-red-200"
+                            >
+                              Delete
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
