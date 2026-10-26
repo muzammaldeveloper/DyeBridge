@@ -617,7 +617,17 @@ export default function App() {
       recipeCode
     );
     setMasterRecipes((prev) => ({ ...prev, [recipeCode]: newRecipe }));
-    handleSelectShade(recipeCode, true);
+    setSelectedShade(recipeCode);
+    setPretreatmentItems(cloneRecipeItems(newRecipe.pretreatment, 'pt'));
+    setDyeItems(cloneRecipeItems(newRecipe.dyes, 'dy'));
+    setAuxiliaryItems(cloneRecipeItems(newRecipe.auxiliaries, 'ax'));
+    setSecondAdditionItems([]);
+    setIsSecondAdditionEnabled(false);
+    setConesCount(newRecipe.defaultCones);
+    setManualWeightKg(Number((newRecipe.defaultCones * perConeKg).toFixed(2)));
+    setYarnCount(newRecipe.defaultCount);
+    setMachineNo(newRecipe.defaultMachine);
+    setLotNo(newRecipe.defaultLot);
     setActiveTab('workspace');
     setPdfToastMessage(`Recipe ${recipeCode} added. Configure and save from workspace.`);
     setTimeout(() => setPdfToastMessage(null), 3500);
